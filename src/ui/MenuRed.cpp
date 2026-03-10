@@ -288,6 +288,46 @@ void MenuRed::drawStatusBar() {
 }
 
 // ── Launch ────────────────────────────────────────────────────
+void MenuRed::drawPipelineLive() {
+    auto& d = M5.Display;
+    IModule* mod = _items[_sel].module;
+    uint8_t stepCount = 0;
+    const PipelineStep* steps = mod->getSteps(stepCount);
+
+    int maxVisible = (Theme::CONTENT_H - Theme::HEADER_H - Theme::STATUS_BAR_H)
+                     / (Theme::MENU_ITEM_H + 2);
+    int scrollOffset = 0;
+    int runningIdx   = -1;
+
+    for (uint8_t i = 0; i < stepCount; i++) {
+        if (steps[i].status == StepStatus::RUNNING) {
+            runningIdx = i;
+            if ((int)i >= maxVisible) scrollOffset = (int)i - maxVisible + 1;
+            break;
+        }
+    }
+
+    // Only redraw the running step's row (spinner animation)
+    if (runningIdx >= 0 && runningIdx >= scrollOffset &&
+        runningIdx < scrollOffset + maxVisible) {
+        int y = Theme::MENU_TOP + (runningIdx - scrollOffset) * (Theme::MENU_ITEM_H + 2);
+        drawStepRow(y, steps[runningIdx], true);
+    }
+
+    // Only redraw the live stats line (CH + PKT change every tick)
+    extern uint32_t g_packetCount;
+    extern uint8_t  g_currentChannel;
+    int hintY2 = Theme::STATUS_BAR_Y - 12;
+    d.fillRect(0, hintY2, Theme::W, 12, Theme::BG);
+    if (runningIdx >= 0) {
+        char stats[42];
+        snprintf(stats, sizeof(stats), " CH:%02d | PKT:%-6lu | ESC:stop",
+                 g_currentChannel, g_packetCount);
+        d.setTextColor(Theme::TEXT_DIM, Theme::BG);
+        d.drawString(stats, 0, hintY2 + 1);
+    }
+}
+
 void MenuRed::launchSelected() {
     // Items 1-3 (attacks) require a target AP to be selected
     if (_sel > 0 && !g_targetAP.valid) {
@@ -296,8 +336,21 @@ void MenuRed::launchSelected() {
     }
     _blocked = false;
     _running = true;
+    _lastRunningStep = -1;
     _items[_sel].module->setProgressCallback([this]() {
-        drawPipeline();
+        IModule* mod = _items[_sel].module;
+        uint8_t stepCount = 0;
+        const PipelineStep* steps = mod->getSteps(stepCount);
+        int8_t cur = -1;
+        for (uint8_t i = 0; i < stepCount; i++) {
+            if (steps[i].status == StepStatus::RUNNING) { cur = (int8_t)i; break; }
+        }
+        if (cur != _lastRunningStep) {
+            _lastRunningStep = cur;
+            drawPipeline();    // step changed: full redraw
+        } else {
+            drawPipelineLive();  // same step: spinner + stats only
+        }
         drawStatusBar();
     });
     _items[_sel].module->run();

@@ -46,7 +46,10 @@ private:
     void drawMenu();
     void drawMenuRow(uint8_t i);
     void drawPipeline();
+    void drawPipelineLive();
     void launchSelected();
+
+    int8_t _lastRunningStep = -1;
 
 public:
     void drawStatusBar();
