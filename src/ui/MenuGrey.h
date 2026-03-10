@@ -55,6 +55,8 @@ private:
     void runScan();
     void storeSelection();
     void storePassword();
+    void saveConfigToSD();
+    void loadConfigFromSD();
 
     static const char* encTag(wifi_auth_mode_t auth);
 };

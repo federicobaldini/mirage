@@ -11,7 +11,7 @@ struct SelectedAP {
     uint8_t bssid[6]     = {};
     uint8_t channel      = 0;
     int8_t  rssi         = 0;
-    char    password[64] = {};   // only used by g_defendedAP
+    char    password[64] = {};   // optional for both target and defended
     bool    valid        = false;
 };
 

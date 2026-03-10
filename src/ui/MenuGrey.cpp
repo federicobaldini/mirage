@@ -3,6 +3,7 @@
 #include "../../include/config.h"
 #include <cstdio>
 #include <cstring>
+#include <SD.h>
 
 // ============================================================
 //  MenuGrey — implementation
@@ -21,7 +22,9 @@ MenuGrey::MenuGrey() {
     _items[3] = { "SETTINGS"       };
 }
 
-void MenuGrey::init() {}
+void MenuGrey::init() {
+    loadConfigFromSD();
+}
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -82,7 +85,97 @@ void MenuGrey::storeSelection() {
 }
 
 void MenuGrey::storePassword() {
-    memcpy(g_defendedAP.password, _pwBuf, sizeof(g_defendedAP.password));
+    SelectedAP& dst = (_scanMode == ScanMode::TARGET) ? g_targetAP : g_defendedAP;
+    memcpy(dst.password, _pwBuf, sizeof(dst.password));
+    saveConfigToSD();
+}
+
+// ── SD config persistence ─────────────────────────────────────
+
+#define CONFIG_PATH  SD_LOG_DIR "/config.ini"
+
+static void writeBssid(char* buf, size_t len, const uint8_t* b) {
+    snprintf(buf, len, "%02X:%02X:%02X:%02X:%02X:%02X",
+             b[0], b[1], b[2], b[3], b[4], b[5]);
+}
+
+static bool parseBssid(const char* s, uint8_t* b) {
+    unsigned v[6];
+    if (sscanf(s, "%02X:%02X:%02X:%02X:%02X:%02X",
+               &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]) != 6) return false;
+    for (int i = 0; i < 6; i++) b[i] = (uint8_t)v[i];
+    return true;
+}
+
+void MenuGrey::saveConfigToSD() {
+    if (!g_sdReady) return;
+    if (!SD.exists(SD_LOG_DIR)) SD.mkdir(SD_LOG_DIR);
+
+    File f = SD.open(CONFIG_PATH, FILE_WRITE);
+    if (!f) return;
+
+    char bssid[20];
+    auto writeAP = [&](const char* prefix, const SelectedAP& ap) {
+        char line[96];
+        writeBssid(bssid, sizeof(bssid), ap.bssid);
+        snprintf(line, sizeof(line), "%s_SSID=%s\n",    prefix, ap.ssid);    f.print(line);
+        snprintf(line, sizeof(line), "%s_BSSID=%s\n",   prefix, bssid);      f.print(line);
+        snprintf(line, sizeof(line), "%s_CH=%d\n",      prefix, ap.channel); f.print(line);
+        snprintf(line, sizeof(line), "%s_RSSI=%d\n",    prefix, ap.rssi);    f.print(line);
+        snprintf(line, sizeof(line), "%s_PASS=%s\n",    prefix, ap.password);f.print(line);
+        snprintf(line, sizeof(line), "%s_VALID=%d\n",   prefix, ap.valid);   f.print(line);
+    };
+
+    f.println("# Mirage config — auto-generated");
+    if (g_targetAP.valid)   writeAP("TGT", g_targetAP);
+    if (g_defendedAP.valid) writeAP("DEF", g_defendedAP);
+    f.close();
+}
+
+void MenuGrey::loadConfigFromSD() {
+    if (!g_sdReady) return;
+    if (!SD.exists(CONFIG_PATH)) return;
+
+    File f = SD.open(CONFIG_PATH, FILE_READ);
+    if (!f) return;
+
+    auto stripNL = [](char* s) {
+        size_t l = strlen(s);
+        while (l > 0 && (s[l-1] == '\n' || s[l-1] == '\r')) s[--l] = '\0';
+    };
+
+    char line[96];
+    while (f.available()) {
+        size_t n = 0;
+        while (f.available() && n < sizeof(line) - 1) {
+            char c = f.read();
+            if (c == '\n') break;
+            line[n++] = c;
+        }
+        line[n] = '\0';
+        stripNL(line);
+        if (line[0] == '#' || line[0] == '\0') continue;
+
+        // Parse KEY=VALUE
+        char* eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        const char* key = line;
+        const char* val = eq + 1;
+
+        auto matchAP = [&](const char* prefix, SelectedAP& ap) {
+            char k[32];
+            snprintf(k, sizeof(k), "%s_SSID",  prefix); if (!strcmp(key, k)) { strncpy(ap.ssid, val, 32); return; }
+            snprintf(k, sizeof(k), "%s_BSSID", prefix); if (!strcmp(key, k)) { parseBssid(val, ap.bssid); return; }
+            snprintf(k, sizeof(k), "%s_CH",    prefix); if (!strcmp(key, k)) { ap.channel = (uint8_t)atoi(val); return; }
+            snprintf(k, sizeof(k), "%s_RSSI",  prefix); if (!strcmp(key, k)) { ap.rssi    = (int8_t)atoi(val);  return; }
+            snprintf(k, sizeof(k), "%s_PASS",  prefix); if (!strcmp(key, k)) { strncpy(ap.password, val, 63); return; }
+            snprintf(k, sizeof(k), "%s_VALID", prefix); if (!strcmp(key, k)) { ap.valid   = atoi(val) != 0; return; }
+        };
+        matchAP("TGT", g_targetAP);
+        matchAP("DEF", g_defendedAP);
+    }
+    f.close();
 }
 
 // ── Input handler ─────────────────────────────────────────────
@@ -132,11 +225,10 @@ bool MenuGrey::update(char key) {
         } else if (key == KEY_ENTER) {
             if (_scanMode == ScanMode::ANALYZE) {
                 _view = GreyView::MENU;
-            } else if (_scanMode == ScanMode::TARGET) {
-                storeSelection();
-                _view = GreyView::MENU;
             } else {
-                storeSelection();   // store SSID/BSSID/ch now
+                storeSelection();   // store SSID/BSSID/ch/rssi
+                // Ask for password for both TARGET and DEFENDED.
+                // For OPEN networks in TARGET mode we still allow skip.
                 _pwLen = 0;
                 memset(_pwBuf, 0, sizeof(_pwBuf));
                 _view = GreyView::PASSWORD;
@@ -147,9 +239,13 @@ bool MenuGrey::update(char key) {
 
     case GreyView::PASSWORD:
         if (key == KEY_ESC) {
-            _view = GreyView::AP_LIST;  _dirty = true;
+            // Skip password — keep selection, clear any previous password
+            SelectedAP& dst = (_scanMode == ScanMode::TARGET) ? g_targetAP : g_defendedAP;
+            memset(dst.password, 0, sizeof(dst.password));
+            saveConfigToSD();
+            _view = GreyView::MENU;  _dirty = true;
         } else if (key == KEY_ENTER) {
-            storePassword();
+            storePassword();        // validates & saves to SD
             _view = GreyView::MENU;  _dirty = true;
         } else if (key == KEY_BACKSPACE) {
             if (_pwLen > 0) { _pwBuf[--_pwLen] = '\0'; _dirty = true; }
@@ -353,22 +449,33 @@ void MenuGrey::drawApList() {
 void MenuGrey::drawPassword() {
     auto& d = M5.Display;
 
+    bool isTarget = (_scanMode == ScanMode::TARGET);
+    const SelectedAP& ap = isTarget ? g_targetAP : g_defendedAP;
+
+    // Header
     d.fillRect(0, 0, Theme::W, Theme::HEADER_H, Theme::GREY_GLOW);
     d.setTextColor(Theme::TEXT_BRIGHT, Theme::GREY_GLOW);
     d.setTextSize(Theme::FONT_NORMAL);
-    d.drawString("[SYS]  SET DEFENDED — PASSWORD", 4, 2);
+    d.drawString(isTarget ? "[SYS]  SET TARGET — PASSWORD"
+                          : "[SYS]  SET DEFENDED — PASSWORD", 4, 2);
 
     d.fillRect(0, Theme::MENU_TOP, Theme::W,
                Theme::CONTENT_H - Theme::HEADER_H - Theme::STATUS_BAR_H, Theme::BG);
 
     // Network name
     char label[48];
-    snprintf(label, sizeof(label), "Network: %.26s", g_defendedAP.ssid);
+    snprintf(label, sizeof(label), "Network: %.26s", ap.ssid);
     d.setTextColor(Theme::GREY_ACCENT, Theme::BG);
     d.drawString(label, 4, Theme::MENU_TOP + 8);
 
+    // Optional hint for target mode
+    if (isTarget) {
+        d.setTextColor(Theme::TEXT_DIM, Theme::BG);
+        d.drawString("(optional — ESC to skip)", 4, Theme::MENU_TOP + 20);
+    }
+
     // Password field
-    int fieldY = Theme::MENU_TOP + 30;
+    int fieldY = isTarget ? Theme::MENU_TOP + 36 : Theme::MENU_TOP + 30;
     d.setTextColor(Theme::TEXT_DIM, Theme::BG);
     d.drawString("Password:", 4, fieldY);
 
@@ -387,10 +494,18 @@ void MenuGrey::drawPassword() {
     if (_pwLen < 63 && curX < Theme::W - 14)
         d.drawString("_", curX, boxY + 3);
 
+    // Length validation hint (WPA2 min 8 chars)
+    if (_pwLen > 0 && _pwLen < 8) {
+        d.setTextColor(Theme::STATUS_FAIL, Theme::BG);
+        d.drawString("WPA2: min 8 chars", 4, boxY + 20);
+    }
+
     int hintY = Theme::STATUS_BAR_Y - 12;
     d.fillRect(0, hintY, Theme::W, 12, Theme::BG);
     d.setTextColor(Theme::TEXT_DIM, Theme::BG);
-    d.drawString(" ENTER:confirm  DEL:backspace  ESC:back", 0, hintY + 1);
+    d.drawString(isTarget ? " ENTER:save  DEL:back  ESC:skip"
+                          : " ENTER:save  DEL:back  ESC:skip",
+                 0, hintY + 1);
 }
 
 // ── Settings view ─────────────────────────────────────────────
@@ -428,9 +543,21 @@ void MenuGrey::drawSettings() {
     snprintf(buf, sizeof(buf), ">%d f/s", DEAUTH_FLOOD_THRESHOLD);
     row("Deauth thr:", buf);
 
-    row("Target:",   g_targetAP.valid   ? g_targetAP.ssid   : "[not set]");
-    row("Defended:", g_defendedAP.valid ? g_defendedAP.ssid : "[not set]");
-    row("SD:",       g_sdReady ? "mounted" : "not found");
+    if (g_targetAP.valid) {
+        snprintf(buf, sizeof(buf), "%.18s%s", g_targetAP.ssid,
+                 g_targetAP.password[0] ? " [pw]" : "");
+        row("Target:", buf);
+    } else {
+        row("Target:", "[not set]");
+    }
+    if (g_defendedAP.valid) {
+        snprintf(buf, sizeof(buf), "%.16s%s", g_defendedAP.ssid,
+                 g_defendedAP.password[0] ? " [pw]" : "");
+        row("Defended:", buf);
+    } else {
+        row("Defended:", "[not set]");
+    }
+    row("SD:", g_sdReady ? "mounted" : "not found");
 
     int hintY = Theme::STATUS_BAR_Y - 12;
     d.fillRect(0, hintY, Theme::W, 12, Theme::BG);
