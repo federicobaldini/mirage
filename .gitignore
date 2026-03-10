@@ -1,0 +1,25 @@
+# PlatformIO build output
+.pio/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Credentials / secrets
+*.env
+secrets.h
+
+# Compiled binaries (keep .bin out of repo; distribute via releases)
+*.bin
+*.elf
+*.map
+
+# Python (PlatformIO uses Python internally)
+__pycache__/
+*.pyc
+
+# JetBrains IDEs
+.idea/
