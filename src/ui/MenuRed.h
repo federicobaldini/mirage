@@ -46,6 +46,7 @@ private:
     RedView    _view    = RedView::MENU;
     bool       _dirty   = true;
     bool       _running = false;
+    bool       _blocked = false;  // true when target not set
 
     Reconnaissance _recon;
     Infiltration   _infiltration;

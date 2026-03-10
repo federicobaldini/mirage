@@ -1,6 +1,7 @@
 #include "MenuBlue.h"
 #include "Theme.h"
 #include "../../include/config.h"
+#include "../AppState.h"
 #include <cstdio>
 
 // ============================================================
@@ -43,8 +44,9 @@ bool MenuBlue::update(char key) {
     } else {
         if (key == KEY_ESC) {
             stopCurrent();
-            _view  = BlueView::MENU;
-            _dirty = true;
+            _blocked = false;
+            _view    = BlueView::MENU;
+            _dirty   = true;
         }
     }
 
@@ -127,7 +129,6 @@ void MenuBlue::drawMenu() {
 
 void MenuBlue::drawPipeline() {
     auto& d = M5.Display;
-    IModule* mod = _items[_sel].module;
 
     d.fillRect(0, 0, Theme::W, Theme::HEADER_H, Theme::BLUE_DIM);
     d.setTextColor(Theme::TEXT_BRIGHT, Theme::BLUE_DIM);
@@ -140,6 +141,19 @@ void MenuBlue::drawPipeline() {
                Theme::CONTENT_H - Theme::HEADER_H - Theme::STATUS_BAR_H,
                Theme::BG);
 
+    // Blocked: no defended AP selected
+    if (_blocked) {
+        int cy = Theme::MENU_TOP + 14;
+        d.setTextColor(Theme::STATUS_FAIL, Theme::BG);
+        d.drawString(" [!] NO DEFENDED AP SET", 4, cy);
+        d.setTextColor(Theme::TEXT_DIM, Theme::BG);
+        d.drawString(" Go to GREY > SET DEFENDED", 4, cy + 14);
+        d.drawString(" then try again.", 4, cy + 26);
+        d.drawString(" ESC:back", 4, Theme::STATUS_BAR_Y - 13);
+        return;
+    }
+
+    IModule* mod = _items[_sel].module;
     uint8_t  stepCount = 0;
     const PipelineStep* steps = mod->getSteps(stepCount);
     int maxVisible = (Theme::CONTENT_H - Theme::HEADER_H - Theme::STATUS_BAR_H)
@@ -243,6 +257,12 @@ void MenuBlue::drawStatusBar() {
 }
 
 void MenuBlue::launchSelected() {
+    // Items 1-2 (threat detection / hardening) require a defended AP to be set
+    if (_sel > 0 && !g_defendedAP.valid) {
+        _blocked = true;
+        return;
+    }
+    _blocked = false;
     _running = true;
     _items[_sel].module->setProgressCallback([this]() {
         drawPipeline();

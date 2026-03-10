@@ -37,6 +37,7 @@ private:
     BlueView   _view    = BlueView::MENU;
     bool       _dirty   = true;
     bool       _running = false;
+    bool       _blocked = false;  // true when defended AP not set
 
     Awareness  _awareness;
     Detection  _detection;

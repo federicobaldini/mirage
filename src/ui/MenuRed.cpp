@@ -1,6 +1,7 @@
 #include "MenuRed.h"
 #include "Theme.h"
 #include "../../include/config.h"
+#include "../AppState.h"
 #include <cstdio>
 
 // ============================================================
@@ -47,8 +48,9 @@ bool MenuRed::update(char key) {
     } else {  // PIPELINE view
         if (key == KEY_ESC) {
             stopCurrent();
-            _view  = RedView::MENU;
-            _dirty = true;
+            _blocked = false;
+            _view    = RedView::MENU;
+            _dirty   = true;
         }
     }
 
@@ -149,7 +151,6 @@ void MenuRed::drawMenu() {
 // ── Pipeline / checklist view ─────────────────────────────────
 void MenuRed::drawPipeline() {
     auto& d = M5.Display;
-    IModule* mod = _items[_sel].module;
 
     // Header
     d.fillRect(0, 0, Theme::W, Theme::HEADER_H, Theme::RED_GLOW);
@@ -163,6 +164,19 @@ void MenuRed::drawPipeline() {
                Theme::CONTENT_H - Theme::HEADER_H - Theme::STATUS_BAR_H,
                Theme::BG);
 
+    // Blocked: no target selected
+    if (_blocked) {
+        int cy = Theme::MENU_TOP + 14;
+        d.setTextColor(Theme::STATUS_FAIL, Theme::BG);
+        d.drawString(" [!] NO TARGET SET", 4, cy);
+        d.setTextColor(Theme::TEXT_DIM, Theme::BG);
+        d.drawString(" Go to GREY > SET TARGET", 4, cy + 14);
+        d.drawString(" then try again.", 4, cy + 26);
+        d.drawString(" ESC:back", 4, Theme::STATUS_BAR_Y - 13);
+        return;
+    }
+
+    IModule* mod = _items[_sel].module;
     uint8_t  stepCount = 0;
     const PipelineStep* steps = mod->getSteps(stepCount);
     int scrollOffset = 0;
@@ -275,6 +289,12 @@ void MenuRed::drawStatusBar() {
 
 // ── Launch ────────────────────────────────────────────────────
 void MenuRed::launchSelected() {
+    // Items 1-3 (attacks) require a target AP to be selected
+    if (_sel > 0 && !g_targetAP.valid) {
+        _blocked = true;
+        return;
+    }
+    _blocked = false;
     _running = true;
     _items[_sel].module->setProgressCallback([this]() {
         drawPipeline();
