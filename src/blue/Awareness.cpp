@@ -56,10 +56,12 @@ void Awareness::run() {
     for (auto& s : _steps) s.status = StepStatus::IDLE;
 
     auto runStep = [&](uint8_t idx, bool (Awareness::*fn)()) {
-        if (_stop) { _steps[idx].status = StepStatus::SKIP; return; }
+        if (_stop) { _steps[idx].status = StepStatus::SKIP; notifyProgress(); return; }
         _steps[idx].status = StepStatus::RUNNING;
+        notifyProgress();
         bool ok = (this->*fn)();
         _steps[idx].status = ok ? StepStatus::OK : StepStatus::FAIL;
+        notifyProgress();
     };
 
     runStep(0, &Awareness::stepPassiveCollection);

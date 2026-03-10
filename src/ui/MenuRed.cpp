@@ -184,11 +184,33 @@ void MenuRed::drawPipeline() {
         drawStepRow(y, steps[i], steps[i].status == StepStatus::RUNNING);
     }
 
-    // ESC hint
+    // Two-line hint area: description on line 1, live stats on line 2
+    extern uint32_t g_packetCount;
+    extern uint8_t  g_currentChannel;
+
+    const char* runDesc = nullptr;
+    for (uint8_t i = 0; i < stepCount; i++) {
+        if (steps[i].status == StepStatus::RUNNING) {
+            runDesc = steps[i].description;
+            break;
+        }
+    }
+
+    int hintY1 = Theme::STATUS_BAR_Y - 24;
+    int hintY2 = Theme::STATUS_BAR_Y - 12;
+    d.fillRect(0, hintY1, Theme::W, 24, Theme::BG);
     d.setTextColor(Theme::TEXT_DIM, Theme::BG);
-    int hintY = Theme::STATUS_BAR_Y - 12;
-    d.fillRect(0, hintY, Theme::W, 12, Theme::BG);
-    d.drawString(" ESC:abort", 0, hintY + 1);
+    if (runDesc) {
+        char desc[42];
+        snprintf(desc, sizeof(desc), " > %.37s", runDesc);
+        d.drawString(desc, 0, hintY1 + 1);
+        char stats[42];
+        snprintf(stats, sizeof(stats), " CH:%02d | PKT:%-6lu | ESC:stop",
+                 g_currentChannel, g_packetCount);
+        d.drawString(stats, 0, hintY2 + 1);
+    } else {
+        d.drawString(" ESC:back", 0, hintY2 + 1);
+    }
 }
 
 void MenuRed::drawStepRow(int y, const PipelineStep& step, bool isCurrent) {
@@ -196,6 +218,10 @@ void MenuRed::drawStepRow(int y, const PipelineStep& step, bool isCurrent) {
 
     uint16_t bg = isCurrent ? Theme::BG_SEL : Theme::BG;
     d.fillRect(0, y, Theme::W, Theme::MENU_ITEM_H + 1, bg);
+
+    // Left accent bar for running step
+    if (isCurrent)
+        d.fillRect(0, y, 3, Theme::MENU_ITEM_H + 1, Theme::RED_ACCENT);
 
     // Status badge colour
     uint16_t badgeCol;
@@ -207,10 +233,17 @@ void MenuRed::drawStepRow(int y, const PipelineStep& step, bool isCurrent) {
         default:                  badgeCol = Theme::STATUS_IDLE; break;
     }
 
-    // Badge: [STAT]
+    // Animated spinner for RUNNING, static label otherwise
+    char badge[5];
+    if (step.status == StepStatus::RUNNING) {
+        static const char spinChars[] = {'/', '-', '\\', '|'};
+        snprintf(badge, sizeof(badge), "RUN%c", spinChars[(millis() / 200) & 3]);
+    } else {
+        strncpy(badge, stepStatusStr(step.status), sizeof(badge));
+    }
     d.fillRect(2, y + 2, 32, 11, badgeCol);
     d.setTextColor(Theme::BG, badgeCol);
-    d.drawString(stepStatusStr(step.status), 3, y + 3);
+    d.drawString(badge, 3, y + 3);
 
     // Step name
     d.setTextColor(isCurrent ? Theme::TEXT_BRIGHT : Theme::TEXT, bg);
@@ -243,7 +276,12 @@ void MenuRed::drawStatusBar() {
 // ── Launch ────────────────────────────────────────────────────
 void MenuRed::launchSelected() {
     _running = true;
+    _items[_sel].module->setProgressCallback([this]() {
+        drawPipeline();
+        drawStatusBar();
+    });
     _items[_sel].module->run();
+    _items[_sel].module->setProgressCallback(nullptr);
     _running = false;
     _dirty   = true;
 }

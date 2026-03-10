@@ -57,17 +57,21 @@ void Deception::run() {
     for (auto& s : _steps) s.status = StepStatus::IDLE;
 
     auto runStep = [&](uint8_t idx, bool (Deception::*fn)()) {
-        if (_stop) { _steps[idx].status = StepStatus::SKIP; return; }
+        if (_stop) { _steps[idx].status = StepStatus::SKIP; notifyProgress(); return; }
         _steps[idx].status = StepStatus::RUNNING;
+        notifyProgress();
         bool ok = (this->*fn)();
         _steps[idx].status = ok ? StepStatus::OK : StepStatus::FAIL;
+        notifyProgress();
     };
 
     runStep(0, &Deception::stepEvilTwinAP);
     // Steps 1 and 2 require a specific target AP to attack
     if (!_hasTarget) {
         _steps[1].status = StepStatus::SKIP;
+        notifyProgress();
         _steps[2].status = StepStatus::SKIP;
+        notifyProgress();
     } else {
         runStep(1, &Deception::stepDeauthFlood);
         runStep(2, &Deception::stepFakeProbeResponses);

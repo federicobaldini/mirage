@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 
 // ============================================================
 //  IModule — common interface for all Red/Blue pipeline modules
@@ -60,4 +61,17 @@ public:
 
     // Human-readable module name (shown in menu header).
     virtual const char* getName() const = 0;
+
+    // Register a callback invoked by notifyProgress() inside run().
+    // The menu sets this before calling run() to receive live redraws.
+    void setProgressCallback(std::function<void()> cb) {
+        _progressCb = std::move(cb);
+    }
+
+protected:
+    // Call from within run()/step functions to trigger a live display update.
+    void notifyProgress() { if (_progressCb) _progressCb(); }
+
+private:
+    std::function<void()> _progressCb;
 };

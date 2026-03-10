@@ -59,6 +59,7 @@ void Detection::run() {
 
     for (uint8_t i = 0; i < STEP_COUNT && !_stop; i++) {
         _steps[i].status = StepStatus::RUNNING;
+        notifyProgress();
         bool ok = false;
 
         uint32_t stepEnd = millis() + windowPerStep;
@@ -70,6 +71,7 @@ void Detection::run() {
                 g_currentChannel = ch;
                 delay(HOP_INTERVAL_MS);
             }
+            notifyProgress();
         }
 
         // Analyse what was collected during this window
@@ -84,6 +86,7 @@ void Detection::run() {
 
         _steps[i].status = _stop ? StepStatus::SKIP
                          : (ok   ? StepStatus::OK : StepStatus::FAIL);
+        notifyProgress();
     }
 
     stopPromiscuous();

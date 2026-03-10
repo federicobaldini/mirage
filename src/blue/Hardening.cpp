@@ -48,15 +48,18 @@ void Hardening::run() {
     for (auto& s : _steps) s.status = StepStatus::IDLE;
 
     auto runStep = [&](uint8_t idx, bool (Hardening::*fn)()) {
-        if (_stop) { _steps[idx].status = StepStatus::SKIP; return; }
+        if (_stop) { _steps[idx].status = StepStatus::SKIP; notifyProgress(); return; }
         _steps[idx].status = StepStatus::RUNNING;
+        notifyProgress();
         bool ok = (this->*fn)();
         _steps[idx].status = ok ? StepStatus::OK : StepStatus::FAIL;
+        notifyProgress();
     };
 
     // Step 0: explicit scan (skipped if APs were injected from Awareness)
     if (!_stop) {
         _steps[0].status = StepStatus::RUNNING;
+        notifyProgress();
         if (!_liveAPs.empty()) {
             // Pre-populated from Awareness — convert and skip live scan
             for (const auto& a : _liveAPs) {
@@ -68,12 +71,15 @@ void Hardening::run() {
                 _scannedAPs.push_back(la);
             }
             _steps[0].status = StepStatus::SKIP;
+            notifyProgress();
         } else {
             quickScan();
             _steps[0].status = _scannedAPs.empty() ? StepStatus::FAIL : StepStatus::OK;
+            notifyProgress();
         }
     } else {
         _steps[0].status = StepStatus::SKIP;
+        notifyProgress();
     }
 
     runStep(1, &Hardening::stepAuditEncryption);

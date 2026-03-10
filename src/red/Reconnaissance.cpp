@@ -71,10 +71,12 @@ void Reconnaissance::run() {
     };
 
     for (uint8_t i = 0; i < STEP_COUNT; i++) {
-        if (_stop) { _steps[i].status = StepStatus::SKIP; continue; }
+        if (_stop) { _steps[i].status = StepStatus::SKIP; notifyProgress(); continue; }
         _steps[i].status = StepStatus::RUNNING;
+        notifyProgress();
         bool ok = (this->*pipeline[i].fn)();
         _steps[i].status = ok ? StepStatus::OK : StepStatus::FAIL;
+        notifyProgress();
     }
 
     stopPromiscuous();
@@ -180,12 +182,12 @@ APRecord* Reconnaissance::findOrAddAP(const uint8_t* bssid) {
 // ── Pipeline steps ────────────────────────────────────────────
 
 bool Reconnaissance::stepPassiveScan() {
-    // Radio and PCAP already started by run(); just hop channels.
     for (uint8_t ch = SCAN_CHANNEL_MIN;
          ch <= SCAN_CHANNEL_MAX && !_stop; ch++) {
         setChannel(ch);
         uint32_t deadline = millis() + SCAN_DWELL_MS;
         while (millis() < deadline && !_stop) delay(5);
+        notifyProgress();
     }
     return true;
 }
@@ -219,9 +221,9 @@ bool Reconnaissance::stepActiveProbeSweep() {
             inject_frame(WIFI_IF_STA, probe, sizeof(probe));
             delay(20);
         }
-        // Dwell to receive probe responses via still-active promiscuous CB
         uint32_t deadline = millis() + SCAN_DWELL_MS / 2;
         while (millis() < deadline && !_stop) delay(5);
+        notifyProgress();
     }
 
     // Return to NULL (passive) mode; promiscuous callback remains registered
@@ -238,6 +240,7 @@ bool Reconnaissance::stepProbeRequestSniff() {
         setChannel(ch);
         uint32_t until = millis() + SCAN_DWELL_MS * 2;
         while (millis() < until && millis() < deadline && !_stop) delay(5);
+        notifyProgress();
     }
     return true;
 }

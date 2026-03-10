@@ -30,8 +30,10 @@ void CauseChaoS::run() {
     _steps[0].status = StepStatus::IDLE;
 
     _steps[0].status = StepStatus::RUNNING;
+    notifyProgress();
     bool ok = stepSsidStorm();
     _steps[0].status = ok ? StepStatus::OK : StepStatus::FAIL;
+    notifyProgress();
 
     _status = StepStatus::OK;
 }

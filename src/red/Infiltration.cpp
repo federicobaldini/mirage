@@ -52,9 +52,11 @@ void Infiltration::run() {
     // Step 0
     if (!_stop) {
         _steps[0].status = StepStatus::RUNNING;
+        notifyProgress();
         ok = stepClassifyTargets();
         _steps[0].status = ok ? StepStatus::OK : StepStatus::FAIL;
-    } else _steps[0].status = StepStatus::SKIP;
+        notifyProgress();
+    } else { _steps[0].status = StepStatus::SKIP; notifyProgress(); }
 
     // Step 1 — WPS (skip if no WPS targets)
     if (!_stop) {
@@ -63,25 +65,30 @@ void Infiltration::run() {
             if (ap.wps) { hasWps = true; break; }
         if (hasWps) {
             _steps[1].status = StepStatus::RUNNING;
+            notifyProgress();
             ok = true;
             for (auto& ap : _targets) {
                 if (ap.wps && !_stop) ok &= stepWpsAttack(ap);
             }
             _steps[1].status = ok ? StepStatus::OK : StepStatus::FAIL;
+            notifyProgress();
         } else {
             _steps[1].status = StepStatus::SKIP;
+            notifyProgress();
         }
-    } else _steps[1].status = StepStatus::SKIP;
+    } else { _steps[1].status = StepStatus::SKIP; notifyProgress(); }
 
     // Steps 2-4
     for (uint8_t i = 2; i < STEP_COUNT; i++) {
-        if (_stop) { _steps[i].status = StepStatus::SKIP; continue; }
+        if (_stop) { _steps[i].status = StepStatus::SKIP; notifyProgress(); continue; }
         _steps[i].status = StepStatus::RUNNING;
+        notifyProgress();
         bool res = false;
         if (i == 2) res = stepPmkidHarvest();
         if (i == 3) res = stepDeauthHandshake();
         if (i == 4) res = stepCaptivePortal();
         _steps[i].status = res ? StepStatus::OK : StepStatus::FAIL;
+        notifyProgress();
     }
 
     _status = StepStatus::OK;
