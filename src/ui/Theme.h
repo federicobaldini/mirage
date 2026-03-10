@@ -36,6 +36,12 @@ constexpr uint16_t BLUE_BRIGHT   = rgb( 80, 160, 255);   // bright blue (selecte
 constexpr uint16_t BLUE_DIM      = rgb( 20,  60, 120);   // muted blue
 constexpr uint16_t BLUE_GLOW     = rgb( 30,  90, 180);   // status bar accent
 
+// ── Grey / system palette ────────────────────────────────────
+constexpr uint16_t GREY_ACCENT   = rgb(160, 160, 185);   // primary grey
+constexpr uint16_t GREY_BRIGHT   = rgb(220, 220, 240);   // bright grey (selected)
+constexpr uint16_t GREY_DIM      = rgb( 50,  50,  70);   // muted grey
+constexpr uint16_t GREY_GLOW     = rgb( 65,  65,  90);   // header strip
+
 // ── Status indicator colours ──────────────────────────────────
 constexpr uint16_t STATUS_OK     = rgb( 50, 200,  80);   // green
 constexpr uint16_t STATUS_RUN    = rgb(220, 180,  40);   // amber
