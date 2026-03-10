@@ -43,6 +43,7 @@ private:
     Hardening  _hardening;
 
     void drawMenu();
+    void drawMenuRow(uint8_t i);
     void drawPipeline();
     void launchSelected();
 

@@ -92,9 +92,13 @@ bool MenuGrey::update(char key) {
 
     case GreyView::MENU:
         if (key == KEY_UP && _sel > 0) {
-            _sel--;  _dirty = true;
+            uint8_t prev = _sel--;
+            drawMenuRow(prev);
+            drawMenuRow(_sel);
         } else if (key == KEY_DOWN && _sel < ITEM_COUNT - 1) {
-            _sel++;  _dirty = true;
+            uint8_t prev = _sel++;
+            drawMenuRow(prev);
+            drawMenuRow(_sel);
         } else if (key == KEY_ENTER) {
             if (_sel == 3) {
                 _view = GreyView::SETTINGS;
@@ -180,6 +184,34 @@ void MenuGrey::draw() {
         case GreyView::SETTINGS: drawSettings(); break;
     }
     drawStatusBar();
+}
+
+// ── Single row redraw (no-flicker navigation) ─────────────────
+void MenuGrey::drawMenuRow(uint8_t i) {
+    auto& d = M5.Display;
+    int availH = Theme::STATUS_BAR_Y - Theme::MENU_TOP - 12;
+    int stride  = availH / ITEM_COUNT;
+    int rowH    = stride - 1;
+    int y       = Theme::MENU_TOP + i * stride;
+    bool isSel  = (i == _sel);
+
+    uint16_t rowBg = isSel ? Theme::BG_SEL : Theme::BG_ITEM;
+    d.fillRect(0, y, Theme::W, rowH, rowBg);
+    if (isSel)
+        d.fillRect(0, y, 3, rowH, Theme::GREY_ACCENT);
+
+    char buf[64];
+    if (i == 1 && g_targetAP.valid)
+        snprintf(buf, sizeof(buf), "%d. %s  [%.14s]", i + 1, _items[i].title, g_targetAP.ssid);
+    else if (i == 2 && g_defendedAP.valid)
+        snprintf(buf, sizeof(buf), "%d. %s  [%.12s]", i + 1, _items[i].title, g_defendedAP.ssid);
+    else
+        snprintf(buf, sizeof(buf), "%d. %s", i + 1, _items[i].title);
+
+    d.setTextColor(isSel ? Theme::GREY_BRIGHT : Theme::TEXT, rowBg);
+    d.setTextSize(Theme::FONT_NORMAL);
+    d.drawString(buf, 6, y + (rowH - 8) / 2);
+    d.drawFastHLine(0, y + rowH, Theme::W, Theme::BORDER);
 }
 
 // ── Menu view ─────────────────────────────────────────────────

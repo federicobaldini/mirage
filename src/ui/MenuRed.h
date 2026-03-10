@@ -53,6 +53,7 @@ private:
     CauseChaoS     _chaos;
 
     void drawMenu();
+    void drawMenuRow(uint8_t i);
     void drawPipeline();
     void launchSelected();
 

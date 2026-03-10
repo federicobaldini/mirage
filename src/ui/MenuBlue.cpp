@@ -28,9 +28,13 @@ void MenuBlue::init() {
 bool MenuBlue::update(char key) {
     if (_view == BlueView::MENU) {
         if (key == KEY_UP && _sel > 0) {
-            _sel--;  _dirty = true;
+            uint8_t prev = _sel--;
+            drawMenuRow(prev);
+            drawMenuRow(_sel);
         } else if (key == KEY_DOWN && _sel < ITEM_COUNT - 1) {
-            _sel++;  _dirty = true;
+            uint8_t prev = _sel++;
+            drawMenuRow(prev);
+            drawMenuRow(_sel);
         } else if (key == KEY_ENTER) {
             _view  = BlueView::PIPELINE;
             _dirty = true;
@@ -54,6 +58,31 @@ void MenuBlue::draw() {
     else
         drawPipeline();
     drawStatusBar();
+}
+
+// ── Single row redraw (no-flicker navigation) ─────────────────
+void MenuBlue::drawMenuRow(uint8_t i) {
+    auto& d = M5.Display;
+    int stride = Theme::MENU_ITEM_H * 2 + 2;
+    int rowH   = Theme::MENU_ITEM_H * 2 + 1;
+    int y      = Theme::MENU_TOP + i * stride;
+    bool isSel = (i == _sel);
+
+    uint16_t rowBg = isSel ? Theme::BG_SEL : Theme::BG_ITEM;
+    d.fillRect(0, y, Theme::W, rowH, rowBg);
+    if (isSel)
+        d.fillRect(0, y, 3, rowH, Theme::BLUE_ACCENT);
+
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%d. %s", i + 1, _items[i].title);
+    d.setTextColor(isSel ? Theme::BLUE_BRIGHT : Theme::TEXT, rowBg);
+    d.setTextSize(Theme::FONT_NORMAL);
+    d.drawString(buf, 6, y + 2);
+
+    d.setTextColor(Theme::TEXT_DIM, rowBg);
+    d.drawString(_items[i].subtitle, 6, y + Theme::MENU_ITEM_H + 1);
+
+    d.drawFastHLine(0, y + rowH, Theme::W, Theme::BORDER);
 }
 
 void MenuBlue::drawMenu() {

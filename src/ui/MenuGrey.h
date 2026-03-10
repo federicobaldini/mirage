@@ -46,6 +46,7 @@ private:
     uint8_t _pwLen     = 0;
 
     void drawMenu();
+    void drawMenuRow(uint8_t i);
     void drawScanning();
     void drawApList();
     void drawPassword();

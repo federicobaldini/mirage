@@ -38,7 +38,7 @@ bool     g_sdReady        = false;
 
 // ── Mode ──────────────────────────────────────────────────────
 enum class AppMode { RED, BLUE, GREY };
-static AppMode  s_mode   = AppMode::RED;
+static AppMode  s_mode   = AppMode::GREY;
 static MenuRed  s_menuRed;
 static MenuBlue s_menuBlue;
 static MenuGrey s_menuGrey;
@@ -93,7 +93,11 @@ static void drawSplash() {
 static void initSD() {
     g_sdReady = (SD.cardType() != CARD_NONE);
     if (!g_sdReady) {
-        // SPI(40 MHz, MOSI=14, MISO=39, SCK=40, CS=12) — Cardputer wiring.
+        // M5Unified did not mount the card — try explicitly with Cardputer wiring:
+        // SCK=40, MISO=39, MOSI=14, CS=12.
+        // SPI.begin() must be called with the correct pins; the Arduino default
+        // SPI on ESP32-S3 has MOSI=11 which is wrong and would clobber GPIO11.
+        SPI.begin(40 /*SCK*/, 39 /*MISO*/, 14 /*MOSI*/, 12 /*CS*/);
         g_sdReady = SD.begin(12, SPI, 40000000);
     }
     if (g_sdReady && !SD.exists(SD_LOG_DIR)) {
@@ -228,10 +232,24 @@ void loop() {
         else                              s_menuGrey.update(pressedKey);
     }
 
-    // ── Periodic status bar refresh (~4 Hz) ──────────────────
+    // ── Periodic status bar refresh — only when content changes ──
+    static uint32_t s_lastPkt  = UINT32_MAX;
+    static uint8_t  s_lastCh   = 0xFF;
+    static bool     s_lastSd   = false;
+    static AppMode  s_lastMode = AppMode::GREY;
     static uint32_t lastStatusRefresh = millis();
-    if (millis() - lastStatusRefresh > 250) {
+
+    bool statusDirty = (g_packetCount    != s_lastPkt)  ||
+                       (g_currentChannel != s_lastCh)   ||
+                       (g_sdReady        != s_lastSd)   ||
+                       (s_mode           != s_lastMode);
+
+    if (statusDirty || millis() - lastStatusRefresh > 2000) {
         lastStatusRefresh = millis();
+        s_lastPkt  = g_packetCount;
+        s_lastCh   = g_currentChannel;
+        s_lastSd   = g_sdReady;
+        s_lastMode = s_mode;
         if      (s_mode == AppMode::RED)  s_menuRed.drawStatusBar();
         else if (s_mode == AppMode::BLUE) s_menuBlue.drawStatusBar();
         else                              s_menuGrey.drawStatusBar();
